@@ -1,7 +1,6 @@
 import {
   Activity,
   ChevronRight,
-  FileText,
   Home,
   LoaderCircle,
   Play,
