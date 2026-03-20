@@ -1,0 +1,33 @@
+# Build artifacts
+backend/target/
+frontend/node_modules/
+frontend/dist/
+release/
+
+# Portable toolchains (large binaries, not for git)
+tools/
+
+# Runtime data (generated at runtime)
+runtime/output/
+runtime/generated/
+runtime/logs/
+runtime/inbox/
+runtime/releases/
+runtime/web/
+runtime/settings.json
+runtime/jobs.json
+
+# OS files
+.DS_Store
+._*
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.sw?
+
+# Misc
+*.local
+*.log

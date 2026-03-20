@@ -1,0 +1,103 @@
+name: windows-release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-release:
+    runs-on: windows-2022
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Patch local Unicorn SDK
+        shell: pwsh
+        run: ./scripts/patch-unicorn-sdk.ps1
+
+      - name: Install frontend dependencies
+        shell: pwsh
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        shell: pwsh
+        working-directory: frontend
+        run: npm run build
+
+      - name: Build backend release
+        shell: pwsh
+        working-directory: backend
+        run: cargo build --release
+
+      - name: Create portable bundle
+        shell: pwsh
+        run: |
+          $bundle = Join-Path $PWD 'release\PHI-Sequenz-Manager-v1'
+          if (Test-Path $bundle) { Remove-Item $bundle -Recurse -Force }
+
+          # Core directories
+          New-Item -ItemType Directory -Path (Join-Path $bundle 'runtime\web') -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $bundle 'runtime\output') -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $bundle 'runtime\generated') -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $bundle 'runtime\logs') -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $bundle 'runtime\inbox') -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $bundle 'scripts') -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $bundle 'macros') -Force | Out-Null
+          New-Item -ItemType Directory -Path (Join-Path $bundle 'tests\fixtures') -Force | Out-Null
+
+          # Backend binary
+          Copy-Item .\backend\target\release\hybrid_approach.exe (Join-Path $bundle 'hybrid_approach.exe') -Force
+
+          # Frontend build
+          Copy-Item .\frontend\dist\* (Join-Path $bundle 'runtime\web') -Recurse -Force
+
+          # Scripts
+          foreach ($scriptName in @('run-release.ps1', 'build-workbook.ps1', 'run-excel-pipeline.ps1', 'common.ps1')) {
+            Copy-Item (Join-Path '.\scripts' $scriptName) (Join-Path $bundle 'scripts' $scriptName) -Force
+          }
+
+          # VBA Macros
+          Copy-Item .\macros\*.bas (Join-Path $bundle 'macros') -Force
+
+          # Test fixtures
+          if (Test-Path .\tests\fixtures\sample_phi.dat) {
+            Copy-Item .\tests\fixtures\sample_phi.dat (Join-Path $bundle 'tests\fixtures\sample_phi.dat') -Force
+          }
+
+          # Default runtime database
+          '[]' | Set-Content (Join-Path $bundle 'runtime\jobs.json') -Encoding UTF8
+
+          # Portable start.bat
+          Copy-Item .\start.bat (Join-Path $bundle 'start.bat') -Force
+
+          # Documentation
+          Copy-Item .\README.md (Join-Path $bundle 'README.md') -Force
+
+          # Create ZIP
+          Compress-Archive -Path (Join-Path $bundle '*') -DestinationPath .\release\PHI-Sequenz-Manager-v1.zip -Force
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PHI-Sequenz-Manager-v1
+          path: release/PHI-Sequenz-Manager-v1.zip
+
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/PHI-Sequenz-Manager-v1.zip
+          generate_release_notes: true
